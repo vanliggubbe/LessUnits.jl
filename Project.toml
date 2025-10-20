@@ -1,6 +1,6 @@
 name = "LessUnits"
 uuid = "05e0e9bd-d7a3-4127-a531-85e488807e56"
-version = "1.0.0-DEV"
+version = "0.0.1"
 authors = ["Vasilii Vadimov"]
 
 [deps]
@@ -8,9 +8,9 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
-LinearAlgebra = "1.12.0"
-Unitful = "1.25.0"
-julia = "1.6.7"
+LinearAlgebra = "1"
+Unitful = "1"
+julia = "1.6"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

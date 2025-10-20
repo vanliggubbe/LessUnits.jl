@@ -3,7 +3,7 @@ module LessUnits
 import Unitful: Dimensions, Dimension, Quantity, @u_str, dimension, uconvert, NoUnits, Level
 import LinearAlgebra: I
 
-export unitless, unitof
+export unitless, unitof, LessUnit
 
 unravel(a :: Dimension{T}) where {T} = (T => a.power)
 unravel(:: Dimensions{T}) where {T} = map(unravel, T)
@@ -113,5 +113,15 @@ Returns dimensionless value of quantity `q`, assuming each element of `basis` to
 Throws `ArgumentError` if elements of `basis` are not independent or `q` cannot be expressed through `basis` units.
 """
 unitless(q, basis :: Tuple{Vararg{Quantity}}) = uconvert(NoUnits, q / unitof(dimension(q), basis))    
+
+struct LessUnit{T <: Tuple{Vararg{Quantity}}}
+    basis :: T
+end
+
+LessUnit(a :: Any...) = LessUnit(a)
+
+(a :: LessUnit)(b) = unitless(b, a.basis)
+(a :: LessUnit)(b :: Dimension) = unitof(b, a.basis)
+(a :: LessUnit)(b :: Type) = unitof(b, a.basis)
 
 end
