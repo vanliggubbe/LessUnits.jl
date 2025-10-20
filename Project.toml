@@ -1,9 +1,15 @@
 name = "LessUnits"
 uuid = "05e0e9bd-d7a3-4127-a531-85e488807e56"
-authors = ["Vasilii Vadimov"]
 version = "1.0.0-DEV"
+authors = ["Vasilii Vadimov"]
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
+LinearAlgebra = "1.12.0"
+Unitful = "1.25.0"
 julia = "1.6.7"
 
 [extras]
