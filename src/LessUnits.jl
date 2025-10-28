@@ -38,7 +38,7 @@ unravel(:: Type{Dimensions{T}}) where {T} = map(unravel, T)
     n = size(A)[1]
     # Gaussian elimination
     for i in 1 : (n - 1)
-        j = i + argmax(map(abs, A[(i + 1) : end, i]))
+        j = i - 1 + argmax(map(abs, A[i : end, i]))
         A[i, :], A[j, :] = A[j, :], A[i, :]
         B[i, :], B[j, :] = B[j, :], B[i, :]
         if iszero(A[i, i])
