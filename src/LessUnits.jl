@@ -1,6 +1,6 @@
 module LessUnits
 
-import Unitful: Dimensions, Dimension, Quantity, @u_str, dimension, uconvert, NoUnits, Level
+import Unitful: Dimensions, Dimension, Quantity, @u_str, dimension, uconvert, NoUnits, Level, Units
 import LinearAlgebra: I
 
 export unitless, unitof, LessUnit
@@ -99,6 +99,8 @@ unitof(:: Dimensions{()}, basis :: Tuple{Vararg{Quantity}}) = one(promote_type(_
     return ret
 end
 
+unitof(u :: Units{N, D, A}, basis :: Tuple{Vararg{Quantity}}) where {N, D, A} = uconvert(u, unitof(D, basis))
+
 unitof(
     :: Type{<: Union{Quantity{T, D, U}, Level{L, S, Quantity{T, D, U}} where {L, S}} where {T, U}},
     basis :: Tuple{Vararg{Quantity}}
@@ -122,6 +124,7 @@ LessUnit(a :: Any...) = LessUnit(a)
 
 (a :: LessUnit)(b) = unitless(b, a.basis)
 (a :: LessUnit)(b :: Dimension) = unitof(b, a.basis)
+(a :: LessUnit)(b :: Units) = unitof(b, a.basis)
 (a :: LessUnit)(b :: Type) = unitof(b, a.basis)
 
 end
