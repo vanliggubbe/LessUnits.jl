@@ -1,7 +1,6 @@
 module LessUnits
 
 import Unitful: Dimensions, Dimension, Quantity, @u_str, dimension, uconvert, NoUnits, Level, Units
-import LinearAlgebra: I
 
 export unitless, unitof, LessUnit
 
