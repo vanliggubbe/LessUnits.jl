@@ -113,7 +113,7 @@ unitof(:: T, basis :: Tuple{Vararg{Quantity}}) where {T <: Union{Quantity, Level
 Returns dimensionless value of quantity `q`, assuming each element of `basis` to be normalized to unity.
 Throws `ArgumentError` if elements of `basis` are not independent or `q` cannot be expressed through `basis` units.
 """
-unitless(q, basis :: Tuple{Vararg{Quantity}}) = uconvert(NoUnits, q / unitof(dimension(q), basis))    
+unitless(basis :: Tuple{Vararg{Quantity}}, q) = uconvert(NoUnits, q / unitof(dimension(q), basis))    
 
 struct LessUnit{T <: Tuple{Vararg{Quantity}}}
     basis :: T
@@ -121,7 +121,7 @@ end
 
 LessUnit(a :: Any...) = LessUnit(a)
 
-(a :: LessUnit)(b) = unitless(b, a.basis)
+(a :: LessUnit)(b) = unitless(a.basis, b)
 (a :: LessUnit)(b :: Dimension) = unitof(b, a.basis)
 (a :: LessUnit)(b :: Units) = unitof(b, a.basis)
 (a :: LessUnit)(b :: Type) = unitof(b, a.basis)
