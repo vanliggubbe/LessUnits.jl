@@ -1,129 +1,94 @@
 module LessUnits
 
-import Unitful: Dimensions, Dimension, Quantity, @u_str, dimension, uconvert, NoUnits, Level, Units
+import Unitful as UF
+import DynamicQuantities as DQ
+import LinearAlgebra
 
 export unitless, unitof, LessUnit
 
-unravel(a :: Dimension{T}) where {T} = (T => a.power)
-unravel(:: Dimensions{T}) where {T} = map(unravel, T)
-unravel(:: Type{Dimensions{T}}) where {T} = map(unravel, T)
+const Basis = Tuple{Vararg{Union{UF.Quantity, DQ.UnionAbstractQuantity}}}
 
-@generated function psinv(basis :: Dimensions...)
-    index = Dict{Symbol, Int}()
-    vecs = Vector{Rational{Int}}[]
-    # expand over SI fundamental units
-    for el in basis
-        vec = Rational{Int}[]
-        for (dim, pow) in unravel(el)
-            if !haskey(index, dim)
-                index[dim] = length(index) + 1
-            end
-            idx = index[dim]
-            if length(vec) < idx
-                append!(vec, zeros(Rational{Int}, idx - length(vec)))
-            end
-            vec[idx] = pow
-        end
-        push!(vecs, vec)
-    end
-    for vec in vecs
-        append!(vec, zeros(Rational{Int}, length(index) - length(vec)))
-    end
-    D = reduce(hcat, vecs)
-    
-    # find pseudoinverse
-    A = D' * D
-    B = Matrix(D')
-    n = size(A)[1]
-    # Gaussian elimination
-    for i in 1 : (n - 1)
-        j = i - 1 + argmax(map(abs, A[i : end, i]))
-        A[i, :], A[j, :] = A[j, :], A[i, :]
-        B[i, :], B[j, :] = B[j, :], B[i, :]
-        if iszero(A[i, i])
-            return :(throw(ArgumentError("Basis of dimensions `$(basis)` is linearly dependent")))
-        end
-        for k in (i + 1) : n
-            tmp = A[k, i] / A[i, i]
-            A[k, i : end] -= tmp * A[i, i : end]
-            B[k, :] -= tmp * B[i, :]
-        end
-    end
-    # solving right-triangular
-    for i in n : -1 : 1
-        if iszero(A[i, i])
-            return :(throw(ArgumentError("Basis of dimensions `$(basis)` is linearly dependent")))
-        end
-        B[i, :] /= A[i, i]
-        B[1 : (i - 1), :] -= A[1 : (i - 1), i] * transpose(B[i, :])
-    end
+_isunitful(q) = false
+_isunitful(::Type{<:UF.Dimensions}) = true
+_isunitful(::Type{<:Union{UF.Quantity{T, D, U}, UF.Level{L, S, UF.Quantity{T, D, U}} where {L, S}} where {T, U}}) where {D} = true
+_isunitful(::Type{Type{T}}) where {T} = _isunitful(T)
 
-    return quote
-        $(index), $(D), $(B)
+_isdynamic(q) = false
+_isdynamic(::Type{<:Union{DQ.UnionAbstractQuantity, DQ.AbstractDimensions}}) = true
+_isdynamic(::Type{Type{T}}) where {T} = _isdynamic(T)
+
+"""
+    unitof(q, basis::Tuple)
+
+Return the reference quantity (including its scale) for the dimensions specified
+by `q`, treating each quantity in `basis` as unity. The magnitude of `q` is ignored.
+
+Unitful targets may be quantities, quantity types, dimensions, or units. For
+Unitful-only inputs, a units target such as `UF.u"s"` also selects the output units.
+DynamicQuantities targets must be quantity or dimension values: their types do
+not encode physical dimensions. Symbolic DQ quantities are expanded to base units.
+
+Mixing Unitful and DynamicQuantities inputs selects the DynamicQuantities backend
+and emits a rate-limited warning. Dimensional results then use DQ quantities.
+
+For a dimensional target, throw `ArgumentError` if the basis dimensions are
+linearly dependent or the target dimensions cannot be expressed in the basis.
+A dimensionless target returns numeric unity without checking basis independence.
+"""
+@generated function unitof(q, basis :: Basis)
+    if _isdynamic(q) || any(_isdynamic, fieldtypes(basis))
+        return :(_dq_unitof(q, basis))
     end
+    return :(_uf_unitof(q, basis))
 end
 
-_number(:: Quantity{T, D, U}) where {T, D, U} = T
-_number(:: Type{Quantity{T, D, U}}) where {T, D, U} = T
-
 """
-    unitof(q, basis :: Tuple{Vararg{Quantity}})
+    unitless(basis::Tuple, q)
 
-Returns unit of dimensions specified by `q`, assuming each element of `basis` corresponds to unity.
-Throws `ArgumentError` if elements of `basis` are not independent or `q` cannot be expressed through `basis` units.
+Return the dimensionless value of `q`, treating each quantity in `basis` as unity.
+The basis and target may use Unitful or DynamicQuantities. Mixed inputs are
+converted to DynamicQuantities with a rate-limited warning.
+
+For a dimensional target, throw `ArgumentError` if the basis dimensions are
+linearly dependent or the target dimensions cannot be expressed in the basis.
+Dimensionless inputs bypass the basis independence check.
+
+Broadcasting treats the entire basis tuple as a scalar: `unitless.(basis, q)`
+is equivalent to `map(Base.Fix1(unitless, basis), q)` for arrays and tuples.
+For example, with `import DynamicQuantities as DQ`,
+`unitless.((2DQ.u"m",), [2DQ.u"m", 6DQ.u"m"])` returns `[1.0, 3.0]`.
 """
-function unitof end
-
-unitof(:: Dimensions{()}, basis :: Tuple{Vararg{Quantity}}) = one(promote_type(_number.(typeof.(basis))...))
-
-@generated function unitof(q :: Dimensions, basis :: Tuple{Vararg{Quantity}})
-    index, basis_dim, basis_inv = psinv(dimension.(fieldtypes(basis))...)
-    q_dim = zeros(Rational{Int}, size(basis_dim)[1])
-    for (dim, pow) in unravel(q)
-        if !haskey(index, dim)
-            return :(throw(ArgumentError("Quantity of dimension `$(q)` cannot be expanded over `$(dimension.(basis))`")))
-        end
-        q_dim[index[dim]] = pow
+@generated function unitless(basis :: Basis, q)
+    if _isdynamic(q) || any(_isdynamic, fieldtypes(basis))
+        return :(_dq_unitless(basis, q))
     end
-    x = basis_inv * q_dim
-    if basis_dim * x != q_dim
-        return :(throw(ArgumentError("Quantity of dimension `$(q)` cannot be expanded over `$(dimension.(basis))`")))
-    end
-    ret = :($(one(promote_type(_number.(fieldtypes(basis))...))))
-    for (i, pow) in enumerate(x[1 : end])
-        if !iszero(pow)
-            ret = :($(ret) * (basis[$(i)] ^ ($(pow))))
-        end
-    end
-    return ret
+    return :(_uf_unitless(basis, q))
 end
 
-unitof(u :: Units{N, D, A}, basis :: Tuple{Vararg{Quantity}}) where {N, D, A} = uconvert(u, unitof(D, basis))
-
-unitof(
-    :: Type{<: Union{Quantity{T, D, U}, Level{L, S, Quantity{T, D, U}} where {L, S}} where {T, U}},
-    basis :: Tuple{Vararg{Quantity}}
-) where {D} = unitof(D, basis)
-
-unitof(:: T, basis :: Tuple{Vararg{Quantity}}) where {T <: Union{Quantity, Level}} = unitof(T, basis)
+Base.Broadcast.broadcasted(::typeof(unitless), basis :: Basis, q) =
+    Base.Broadcast.broadcasted(unitless, Ref(basis), q)
 
 """
-    unitless(q, basis :: Tuple{Vararg{Quantity}})
+    LessUnit(basis::Tuple)
+    LessUnit(basis...)
 
-Returns dimensionless value of quantity `q`, assuming each element of `basis` to be normalized to unity.
-Throws `ArgumentError` if elements of `basis` are not independent or `q` cannot be expressed through `basis` units.
+Store a reference basis of Unitful and/or DynamicQuantities quantities. Calling
+the result on a quantity computes `unitless(basis, q)`; calling it on dimensions,
+Unitful units, or a Unitful quantity type computes `unitof(q, basis)`.
+DQ unit expressions are quantities, so use `unitof` explicitly to obtain their
+reference quantity.
 """
-unitless(basis :: Tuple{Vararg{Quantity}}, q) = uconvert(NoUnits, q / unitof(dimension(q), basis))    
-
-struct LessUnit{T <: Tuple{Vararg{Quantity}}}
+struct LessUnit{T <: Basis}
     basis :: T
 end
 
 LessUnit(a :: Any...) = LessUnit(a)
 
 (a :: LessUnit)(b) = unitless(a.basis, b)
-(a :: LessUnit)(b :: Dimension) = unitof(b, a.basis)
-(a :: LessUnit)(b :: Units) = unitof(b, a.basis)
+(a :: LessUnit)(b :: Union{UF.Dimension, UF.Dimensions, UF.Units, DQ.AbstractDimensions}) = unitof(b, a.basis)
 (a :: LessUnit)(b :: Type) = unitof(b, a.basis)
+
+include("unitful.jl")
+include("dynamicquantities.jl")
 
 end
